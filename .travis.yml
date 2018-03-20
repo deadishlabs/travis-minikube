@@ -1,0 +1,20 @@
+sudo: required
+env:
+- CHANGE_MINIKUBE_NONE_USER=true
+before_script:
+# install and setup minikube
+- curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+- curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+- sudo minikube start --vm-driver=none --kubernetes-version=v1.9.0
+- minikube update-context
+# wait for minikube to be up and running
+- JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'; until kubectl get nodes -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True"; do sleep 1; done
+- minikube addons enable ingress
+- kubectl cluster-info
+script:
+# Create nginx pod + svc + ingress and wait for it to be ready
+- kubectl create -f nginx-k8s.yaml
+- until kubectl get po | grep nginx | awk '{ print $3 }' | grep "Running" 2>&1; do sleep 1; done
+after_success:
+- export ETH0_IP=$(/sbin/ifconfig eth0 | grep 'inet addr' | cut -d':' -f2 | awk '{print $1}')
+- echo nginx should now be accessible within the build at $ETH0_IP port 80
